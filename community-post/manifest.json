@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Youtube extract comments",
+  "version": "1.0.0",
+  "description": "Extract comments for a community post from youtube.com",
+  "host_permissions": [
+    "https://www.youtube.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "content_script.js"
+      ]
+    }
+  ]
+}
