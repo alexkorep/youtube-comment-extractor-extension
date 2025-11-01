@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Studio Comment Exporter",
+  "description": "Adds a download button to export YouTube Studio comments into a numbered Markdown file.",
+  "version": "1.0.0",
+  "permissions": [],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://studio.youtube.com/*"
+      ],
+      "js": [
+        "scripts/contentScript.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
