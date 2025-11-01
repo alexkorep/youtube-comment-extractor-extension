@@ -1,58 +1,227 @@
 (() => {
-  const BUTTON_ID = 'ytcex-download-comments';
+  const CONTAINER_ID = 'ytcex-button-container';
+  const DOWNLOAD_BUTTON_ID = 'ytcex-download-comments';
+  const START_BUTTON_ID = 'ytcex-start-scroll';
+  const SCROLL_CONTAINER_SELECTOR = 'ytcp-activity-section[fixed-height]';
 
-  const ensureButton = () => {
-    if (document.getElementById(BUTTON_ID)) {
-      return;
+  let scrollIntervalId = null;
+  const collectedComments = [];
+  let seenNodes = new WeakSet();
+
+  const getScrollContainer = () =>
+    document.querySelector(SCROLL_CONTAINER_SELECTOR);
+
+  const performScroll = () => {
+    const container = getScrollContainer();
+    if (!container) {
+      return false;
     }
 
-    const button = document.createElement('button');
-    button.id = BUTTON_ID;
-    button.textContent = 'Download comments';
-    Object.assign(button.style, {
-      position: 'fixed',
-      right: '24px',
-      bottom: '24px',
-      padding: '10px 16px',
-      backgroundColor: '#0f9d58',
-      color: 'white',
-      border: 'none',
-      borderRadius: '6px',
-      fontSize: '14px',
-      fontWeight: '600',
-      cursor: 'pointer',
-      zIndex: '2147483647',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
-    });
+    const distance =
+      (container instanceof HTMLElement ? container.clientHeight : 0) ||
+      window.innerHeight ||
+      600;
 
-    button.addEventListener('mouseenter', () => {
-      button.style.backgroundColor = '#0b8043';
-    });
+    if (typeof container.scrollBy === 'function') {
+      container.scrollBy({ top: distance, behavior: 'smooth' });
+      return true;
+    }
 
-    button.addEventListener('mouseleave', () => {
-      button.style.backgroundColor = '#0f9d58';
-    });
+    if ('scrollTop' in container) {
+      container.scrollTop += distance;
+      return true;
+    }
 
-    button.addEventListener('click', handleDownload);
-
-    document.body.appendChild(button);
+    return false;
   };
 
-  const handleDownload = () => {
+  const harvestComments = () => {
     const nodes = Array.from(
       document.querySelectorAll('yt-formatted-string#content-text')
     );
 
-    const comments = nodes
-      .map((node) => node.textContent?.trim())
-      .filter((text) => Boolean(text));
+    for (const node of nodes) {
+      if (seenNodes.has(node)) {
+        continue;
+      }
 
-    if (!comments.length) {
-      notify('No comments found on this page.');
+      const text = node.textContent?.trim();
+      if (!text) {
+        continue;
+      }
+
+      seenNodes.add(node);
+      collectedComments.push(text);
+    }
+
+    updateDownloadButtonLabel();
+  };
+
+  const updateStartButtonState = () => {
+    const startButton = document.getElementById(START_BUTTON_ID);
+    if (!startButton) {
       return;
     }
 
-    const markdown = comments
+    if (scrollIntervalId !== null) {
+      startButton.textContent = 'Stop scrolling';
+      startButton.style.backgroundColor = '#185abc';
+    } else {
+      startButton.textContent = 'Start scrolling';
+      startButton.style.backgroundColor = '#1a73e8';
+    }
+  };
+
+  const updateDownloadButtonLabel = () => {
+    const downloadButton = document.getElementById(DOWNLOAD_BUTTON_ID);
+    if (!downloadButton) {
+      return;
+    }
+
+    downloadButton.textContent = `Download comments (${collectedComments.length})`;
+  };
+
+  const ensureButtons = () => {
+    let container = document.getElementById(CONTAINER_ID);
+    if (!container) {
+      container = document.createElement('div');
+      container.id = CONTAINER_ID;
+      Object.assign(container.style, {
+        position: 'fixed',
+        right: '24px',
+        bottom: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        alignItems: 'flex-end',
+        zIndex: '2147483647'
+      });
+      document.body.appendChild(container);
+    }
+
+    let startButton = document.getElementById(START_BUTTON_ID);
+    if (!startButton) {
+      startButton = document.createElement('button');
+      startButton.id = START_BUTTON_ID;
+      startButton.textContent = 'Start scrolling';
+      Object.assign(startButton.style, {
+        padding: '10px 16px',
+        backgroundColor: '#1a73e8',
+        color: 'white',
+        border: 'none',
+        borderRadius: '6px',
+        fontSize: '14px',
+        fontWeight: '600',
+        cursor: 'pointer',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
+      });
+
+      startButton.addEventListener('mouseenter', () => {
+        startButton.style.backgroundColor = '#185abc';
+      });
+
+      startButton.addEventListener('mouseleave', () => {
+        updateStartButtonState();
+      });
+
+      startButton.addEventListener('click', handleStartToggle);
+      container.appendChild(startButton);
+      updateStartButtonState();
+    }
+
+    let downloadButton = document.getElementById(DOWNLOAD_BUTTON_ID);
+    if (!downloadButton) {
+      downloadButton = document.createElement('button');
+      downloadButton.id = DOWNLOAD_BUTTON_ID;
+      Object.assign(downloadButton.style, {
+        padding: '10px 16px',
+        backgroundColor: '#0f9d58',
+        color: 'white',
+        border: 'none',
+        borderRadius: '6px',
+        fontSize: '14px',
+        fontWeight: '600',
+        cursor: 'pointer',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
+      });
+
+      downloadButton.addEventListener('mouseenter', () => {
+        downloadButton.style.backgroundColor = '#0b8043';
+      });
+
+      downloadButton.addEventListener('mouseleave', () => {
+        downloadButton.style.backgroundColor = '#0f9d58';
+      });
+
+      downloadButton.addEventListener('click', handleDownload);
+      container.appendChild(downloadButton);
+      updateDownloadButtonLabel();
+    }
+  };
+
+  const handleStartToggle = () => {
+    if (scrollIntervalId !== null) {
+      stopScrolling();
+      notify('Stopped scrolling.');
+      return;
+    }
+
+    harvestComments();
+    startScrolling();
+    notify('Started scrolling to collect comments.');
+  };
+
+  const startScrolling = () => {
+    if (scrollIntervalId !== null) {
+      return;
+    }
+
+    if (!getScrollContainer()) {
+      notify('Could not find the comments list to scroll.');
+      return;
+    }
+
+    scrollIntervalId = window.setInterval(() => {
+      if (!performScroll()) {
+        stopScrolling();
+        notify('Stopped scrolling because the comments list disappeared.');
+        return;
+      }
+
+      harvestComments();
+    }, 1000);
+
+    if (!performScroll()) {
+      stopScrolling();
+      notify('Could not scroll the comments list.');
+      return;
+    }
+
+    updateStartButtonState();
+  };
+
+  const stopScrolling = () => {
+    if (scrollIntervalId === null) {
+      return;
+    }
+
+    window.clearInterval(scrollIntervalId);
+    scrollIntervalId = null;
+
+    updateStartButtonState();
+  };
+
+  const handleDownload = () => {
+    harvestComments();
+
+    if (!collectedComments.length) {
+      notify('No comments collected yet.');
+      return;
+    }
+
+    stopScrolling();
+
+    const markdown = collectedComments
       .map((comment, index) => `# ${index + 1}\n${comment}\n`)
       .join('\n');
 
@@ -72,7 +241,19 @@
     anchor.remove();
     URL.revokeObjectURL(url);
 
-    notify(`Saved ${comments.length} comment${comments.length === 1 ? '' : 's'}.`);
+    notify(
+      `Saved ${collectedComments.length} comment${
+        collectedComments.length === 1 ? '' : 's'
+      }.`
+    );
+
+    resetCollection();
+  };
+
+  const resetCollection = () => {
+    collectedComments.length = 0;
+    seenNodes = new WeakSet();
+    updateDownloadButtonLabel();
   };
 
   const notify = (message) => {
@@ -106,11 +287,11 @@
   };
 
   const init = () => {
-    ensureButton();
+    ensureButtons();
 
     // YouTube Studio heavily uses dynamic rendering; observe for navigation changes.
     const observer = new MutationObserver(() => {
-      ensureButton();
+      ensureButtons();
     });
 
     observer.observe(document.body, {
