@@ -6,7 +6,8 @@
 
   let scrollIntervalId = null;
   const collectedComments = [];
-  let seenNodes = new WeakSet();
+  const collectedCommentKeys = new Set();
+  let nodeCommentKey = new WeakMap();
 
   const getScrollContainer = () =>
     document.querySelector(SCROLL_CONTAINER_SELECTOR);
@@ -35,22 +36,54 @@
     return false;
   };
 
+  const buildCommentData = (node) => {
+    const text = node.textContent?.trim();
+    if (!text) {
+      return null;
+    }
+
+    const commentElement = node.closest('ytcp-comment');
+    const authorLink =
+      commentElement?.querySelector?.('a#name') ??
+      commentElement?.querySelector?.('#name');
+    const author = authorLink?.textContent?.trim() ?? '';
+    const authorHref =
+      authorLink instanceof HTMLAnchorElement ? authorLink.href : '';
+    const published =
+      commentElement?.querySelector?.('.published-time-text')?.textContent?.trim() ??
+      '';
+
+    const key = [authorHref, author, published, text].filter(Boolean).join('||');
+
+    return {
+      text,
+      key
+    };
+  };
+
   const harvestComments = () => {
-    const nodes = Array.from(
-      document.querySelectorAll('yt-formatted-string#content-text')
-    );
+    const nodes = document.querySelectorAll('yt-formatted-string#content-text');
 
     for (const node of nodes) {
-      if (seenNodes.has(node)) {
+      const data = buildCommentData(node);
+      if (!data) {
         continue;
       }
 
-      const text = node.textContent?.trim();
-      if (!text) {
+      const { text, key } = data;
+      const previousKey = nodeCommentKey.get(node);
+
+      if (previousKey === key) {
         continue;
       }
 
-      seenNodes.add(node);
+      nodeCommentKey.set(node, key);
+
+      if (collectedCommentKeys.has(key)) {
+        continue;
+      }
+
+      collectedCommentKeys.add(key);
       collectedComments.push(text);
     }
 
@@ -252,7 +285,8 @@
 
   const resetCollection = () => {
     collectedComments.length = 0;
-    seenNodes = new WeakSet();
+    collectedCommentKeys.clear();
+    nodeCommentKey = new WeakMap();
     updateDownloadButtonLabel();
   };
 
